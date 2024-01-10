@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>profile pics</title>
+    <style>
+        body {
+            text-align: center;
+        }
+
+        .gallery {
+            display: flex;
+            white-space: nowrap;
+            direction: row;
+            gap: 5px;
+        }
+
+        .profilePic{
+            width: 512px;
+            height: 512px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>
+        titulo
+    </h1>
+    <h3>
+        breve descripción
+    </h3>
+
+    <div class="gallery">
+    </div>
+
+    <script>
+        const cantidadDeFotos = 100;
+        const gallery = document.querySelector(".gallery")
+
+        for (i = cantidadDeFotos; i > 0; i--) {
+            let image = document.createElement("img");
+            image.src = `img/${i}.PNG`
+            image.classList.add("profilePic")
+            gallery.appendChild(image);
+
+
+            /*
+            let textToAdd = document.createElement("p");
+            let enter = document.createElement("br");
+            let enter2 = document.createElement("br");
+            textToAdd.textContent = `se ha encontrado una foto con el índice ${i}`;
+            gallery.appendChild(textToAdd);
+            gallery.appendChild(enter);
+            gallery.appendChild(enter2);
+            */
+        }
+    </script>
+</body>
+
+</html>
