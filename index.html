@@ -94,11 +94,15 @@
         addScrollMargin();
 
         //in case the window is resized this will run so that the margins stay their correct size
+        //this has to be done with a loop bc we need to change both the start and end margins (thats why we use querySelectorAll)
 
         addEventListener("resize", (event) => { });
         onresize = (event) => {
-            let galleryMargin = document.querySelector(".galleryMargin");
-            galleryMargin.style.margin = `${calculateMargin() / 2}px`;
+            let galleryMargin = document.querySelectorAll(".galleryMargin");
+            
+            for (let i = 0; i < galleryMargin.length; i++) {
+                galleryMargin[i].style.margin = `${calculateMargin() / 2}px`;
+            }
         };
 
     </script>
