@@ -12,7 +12,7 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
-            
+
             margin: 0;
         }
 
@@ -32,6 +32,7 @@
             max-width: 820px;
             margin-left: auto;
             margin-right: auto;
+            padding: 40px, 0px;
         }
     </style>
 </head>
@@ -55,15 +56,51 @@
     </div>
 
     <script>
+        //this should be updated with js but well we'll get there
         const cantidadDeFotos = 100;
-        const gallery = document.querySelector(".gallery")
+        const imgWidth = 512;
+        const imgGap = 50;
+
+        const gallery = document.querySelector(".gallery");
+        let screenWidth = document.documentElement.scrollWidth;
+
+        function calculateMargin() {
+            //this way each time you call the function this value is updated
+            screenWidth = document.documentElement.scrollWidth;
+
+            let marginToAdd = screenWidth / 2 - imgWidth / 2 - imgGap;
+            return marginToAdd;
+        }
+
+        //and this function will create an empty div, we'll just call it before the loop that loads the pictures and after it
+
+        function addScrollMargin() {
+            let margin = document.createElement("div");
+            margin.classList.add("galleryMargin");
+            margin.style.margin = `${calculateMargin() / 2}px`;
+
+            gallery.appendChild(margin);
+        }
+
+        addScrollMargin();
 
         for (i = cantidadDeFotos; i > 0; i--) {
             let image = document.createElement("img");
-            image.src = `img/${i}.PNG`
-            image.classList.add("profilePic")
+            image.src = `img/${i}.PNG`;
+            image.classList.add("profilePic");
             gallery.appendChild(image);
         }
+
+        addScrollMargin();
+
+        //in case the window is resized this will run so that the margins stay their correct size
+
+        addEventListener("resize", (event) => { });
+        onresize = (event) => {
+            let galleryMargin = document.querySelector(".galleryMargin");
+            galleryMargin.style.margin = `${calculateMargin() / 2}px`;
+        };
+
     </script>
 </body>
 
