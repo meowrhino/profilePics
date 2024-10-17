@@ -4,14 +4,22 @@
 <head>
     <meta charset="UTF-8">
     <title>profile pics</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Agdasima:wght@400;700&display=swap" rel="stylesheet">
+
     <style>
         body {
             text-align: center;
-            font-family: sans-serif;
+            font-family: "Agdasima", sans-serif;
+            font-weight: 400;
 
             display: flex;
             flex-direction: column;
             justify-content: center;
+
+            color: #333;
 
             margin: 0;
         }
@@ -33,6 +41,20 @@
             margin-left: auto;
             margin-right: auto;
             padding: 40px, 0px;
+
+        }
+
+        a {
+            text-decoration: none;
+            color: lightgray;
+            transition: transform 0.3s ease, font-weight 0.3s ease;
+        }
+
+        /*no sé por qué ésto no va*/
+        a:hover {
+            font-weight: bolder !important;
+            font-size: 22px !important;
+            transform: scale(1.1) !important;
         }
     </style>
 </head>
@@ -41,14 +63,25 @@
 
     <div class="text">
         <h1>
-            my gallery
+            my album
         </h1>
         <h3>
-            I love to upload images that I find relatable to my Telegram profile, and from time to time I indulge in
+            I love to upload images that I find relatable to <a href="https://t.me/meowrhino">my Telegram profile</a>,
+            and, from time to time I like to indulge in
             scrolling through them and
-            find patterns, today I found out that the first one was lost due to the 100 max
-            photos limit (Telegram just did it automatically) so I wanted to create an archive to
+            finding patterns, remembering events and attributes that manu had in that moment, things that may or maynot
+            be there any longer
+            friends, feelings(...), <br> <br>
+
+            I started this album was when I found out that the first ever profile pic for <a
+                href="https://t.me/meowrhino">@meowrhino</a> was lost due to the 100 max
+            photos limit (Telegram just did it automatically) <br><br>
+
+
+
+            In all my creative frustration I created an archive to
             save them forever and be able to store more than just a couple of them
+            and be able to scroll through them
         </h3>
     </div>
 
@@ -61,7 +94,7 @@
 
     <script>
         //this should be updated with js but well we'll get there
-        const cantidadDeFotos = 213;
+        const cantidadDeFotos = 269;
         const imgWidth = 512;
         const imgGap = 50;
 
@@ -103,7 +136,7 @@
         addEventListener("resize", (event) => { });
         onresize = (event) => {
             let galleryMargin = document.querySelectorAll(".galleryMargin");
-            
+
             for (let i = 0; i < galleryMargin.length; i++) {
                 galleryMargin[i].style.margin = `${calculateMargin() / 2}px`;
             }
