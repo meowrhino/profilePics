@@ -1,108 +1,93 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <title>profile pics</title>
+  <meta charset="UTF-8">
+  <title>Profile Pics Gallery</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Agdasima:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Agdasima:wght@400;700&display=swap" rel="stylesheet">
 
-    <style>
-        body {
-            text-align: center;
-            font-family: "Agdasima", sans-serif;
-            font-weight: 400;
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: "Agdasima", sans-serif;
+      background: #fafafa;
+      overflow: hidden; /* evitamos scroll vertical en body */
+    }
 
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
+    /* Indicador fijo encima de la galería */
+    #current-number {
+      position: fixed;
+      top: calc(50% - 256px - 30px); /* 256px = 512/2 de la galería, + 30px de separación */
+      left: 0;
+      width: 100%;
+      text-align: center;
+      font-size: 24px;
+      font-weight: 700;
+      color: #555;
+      pointer-events: none;
+    }
 
-            color: #333;
+    /* La galería centrada verticalmente */
+    .gallery {
+      position: fixed;
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      width: 100vw;
+      height: 512px;
+      display: flex;
+      gap: 50px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
+    .gallery::-webkit-scrollbar { display: none; }
 
-            margin: 0;
-        }
+    .profilePic {
+      flex: 0 0 auto;
+      width: 512px;
+      height: 512px;
+      object-fit: cover;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
 
-        .gallery {
-            display: flex;
-            white-space: nowrap;
-            gap: 50px;
-            overflow: scroll;
-        }
-
-        .profilePic {
-            width: 512px;
-            height: 512px;
-        }
-
-        .text {
-            max-width: 820px;
-            margin-left: auto;
-            margin-right: auto;
-            padding: 40px, 0px;
-
-        }
-
-        a {
-            text-decoration: none;
-            color: lightgray;
-            transition: transform 0.3s ease, font-weight 0.3s ease;
-        }
-
-        /*no sé por qué ésto no va*/
-        a:hover {
-            font-weight: bolder !important;
-            font-size: 22px !important;
-            transform: scale(1.1) !important;
-        }
-    </style>
+    .galleryMargin {
+      flex: 0 0 auto;
+    }
+  </style>
 </head>
-
 <body>
-  <!-- Aquí muestra el número de la imagen centrada -->
   <div id="current-number">0</div>
-
-  <!-- Galería scrollable -->
   <div class="gallery"></div>
 
-    <script>
-        const cantidadDeFotos = 388;
-        const imgWidth = 512;
-        const imgGap = 50;
+  <script>
+    const cantidadDeFotos = 388;
+    const imgWidth = 512;
+    const gallery = document.querySelector(".gallery");
+    const currentNumberEl = document.getElementById("current-number");
 
-        const gallery = document.querySelector(".gallery");
-        const currentNumberEl = document.getElementById("current-number");
+    // Calcula el margen para centrar cada extremo
+    function calculateMargin() {
+      const vw = document.documentElement.clientWidth;
+      return (vw - imgWidth) / 2;
+    }
 
-        function calculateMargin() {
-            //this way each time you call the function this value is updated
-            screenWidth = document.documentElement.scrollWidth;
+    function addScrollMargin() {
+      const m = document.createElement("div");
+      m.classList.add("galleryMargin");
+      m.style.width = `${calculateMargin()}px`;
+      gallery.appendChild(m);
+    }
 
-            let marginToAdd = screenWidth / 2 - imgWidth / 2 - imgGap;
-            return marginToAdd;
-        }
-
-        //and this function will create an empty div, we'll just call it before the loop that loads the pictures and after it
-
-        function addScrollMargin() {
-      const marginDiv = document.createElement("div");
-      marginDiv.classList.add("galleryMargin");
-      // Aplica sólo margin-left y margin-right
-      marginDiv.style.width = `${calculateMargin()}px`;
-      gallery.appendChild(marginDiv);
-        }
-
-    // Poblamos la galería con margen inicial, imagen 0, resto de imágenes y margen final
     function populateGallery() {
-        addScrollMargin();
+      addScrollMargin();
 
-            // Primera imagen (0.jpg)
-            const zeroImg = document.createElement("img");
-      zeroImg.src = "img/0.jpg";
-      zeroImg.classList.add("profilePic");
-      gallery.appendChild(zeroImg);
-
-      // Resto de imágenes (1.png … cantidadDeFotos.png)
+      // Todas las imágenes 388..1
       for (let i = cantidadDeFotos; i > 0; i--) {
         const img = document.createElement("img");
         img.src = `img/${i}.png`;
@@ -110,61 +95,48 @@
         gallery.appendChild(img);
       }
 
-        for (i = cantidadDeFotos; i > 0; i--) {
-            let image = document.createElement("img");
-            image.src = `img/${i}.png`;
-            image.classList.add("profilePic");
-            gallery.appendChild(image);
-        }
+      // Imagen 0 al final
+      const zero = document.createElement("img");
+      zero.src = "img/0.jpg";
+      zero.classList.add("profilePic");
+      gallery.appendChild(zero);
 
-        addScrollMargin();
+      addScrollMargin();
     }
 
-    // Encuentra la imagen cuyo centro está más cercano al centro del viewport
     function updateCurrentImage() {
       const images = document.querySelectorAll('.profilePic');
-      const galleryRect = gallery.getBoundingClientRect();
-      const galleryCenterX = galleryRect.left + galleryRect.width / 2;
-
-      let closestImg = null;
-      let minDiff = Infinity;
+      const rect = gallery.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      let closest = null, minDiff = Infinity;
 
       images.forEach(img => {
-        const rect = img.getBoundingClientRect();
-        const imgCenterX = rect.left + rect.width / 2;
-        const diff = Math.abs(imgCenterX - galleryCenterX);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestImg = img;
+        const r2 = img.getBoundingClientRect();
+        const imgCenter = r2.left + r2.width / 2;
+        const d = Math.abs(imgCenter - centerX);
+        if (d < minDiff) {
+          minDiff = d;
+          closest = img;
         }
       });
 
-      if (closestImg) {
-        const src = closestImg.getAttribute('src');
-        const match = src.match(/\/(\d+)\.\w+$/);
-        const num = match ? match[1] : '';
-        currentNumberEl.textContent = num;
+      if (closest) {
+        const match = closest.src.match(/\/(\d+)\.\w+$/);
+        currentNumberEl.textContent = match ? match[1] : '';
       }
     }
 
-    // Inicializamos
+    // Inicialización
     populateGallery();
     updateCurrentImage();
 
-    // Listeners
-    gallery.addEventListener('scroll', () => {
-      // opcional: podrías "throttlear" esta llamada si es necesario
-      updateCurrentImage();
-    });
-
+    gallery.addEventListener('scroll', updateCurrentImage);
     window.addEventListener('resize', () => {
-      // recalcula márgenes y número al cambiar el tamaño
       document.querySelectorAll('.galleryMargin').forEach(m => {
         m.style.width = `${calculateMargin()}px`;
       });
       updateCurrentImage();
     });
-    </script>
+  </script>
 </body>
-
 </html>
