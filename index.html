@@ -60,55 +60,19 @@
 </head>
 
 <body>
+  <!-- Aquí muestra el número de la imagen centrada -->
+  <div id="current-number">0</div>
 
-    <div class="text">
-        <h1>
-            my album
-        </h1>
-        <h3>
-            I love to upload images that I find relatable to <a href="https://t.me/meowrhino">my Telegram profile</a>,
-            and, from time to time I like to indulge in
-            scrolling through them and
-            finding patterns, remembering events and attributes that manu had in that moment, things that may or maynot
-            be there any longer
-            friends, feelings(...), <br> <br>
-
-            I started this album was when I found out that the first ever profile pic for <a
-                href="https://t.me/meowrhino">@meowrhino</a> was lost due to the 100 max
-            photos limit (Telegram just did it automatically) <br><br>
-
-
-
-            In all my creative frustration I created an archive to
-            save them forever and be able to store more than just a couple of them
-            and be able to scroll through them
-        </h3>
-    </div>
-
-    <div class="gallery">
-    </div>
-
-    <div class="text">
-        <p>you may scroll through all of these</p>
-    </div>
-    
-    <div class="text">
-        <p>update: i recovered the first pic</p>
-        <img src="img/0.jpg" class="theReason">
-        <p>but might continue with this project anyways</p>
-        <p>thank you!</p>
-    </div>
-
-    
+  <!-- Galería scrollable -->
+  <div class="gallery"></div>
 
     <script>
-        //this should be updated with js but well we'll get there
         const cantidadDeFotos = 388;
         const imgWidth = 512;
         const imgGap = 50;
 
         const gallery = document.querySelector(".gallery");
-        let screenWidth = document.documentElement.scrollWidth;
+        const currentNumberEl = document.getElementById("current-number");
 
         function calculateMargin() {
             //this way each time you call the function this value is updated
@@ -121,14 +85,30 @@
         //and this function will create an empty div, we'll just call it before the loop that loads the pictures and after it
 
         function addScrollMargin() {
-            let margin = document.createElement("div");
-            margin.classList.add("galleryMargin");
-            margin.style.margin = `${calculateMargin() / 2}px`;
-
-            gallery.appendChild(margin);
+      const marginDiv = document.createElement("div");
+      marginDiv.classList.add("galleryMargin");
+      // Aplica sólo margin-left y margin-right
+      marginDiv.style.width = `${calculateMargin()}px`;
+      gallery.appendChild(marginDiv);
         }
 
+    // Poblamos la galería con margen inicial, imagen 0, resto de imágenes y margen final
+    function populateGallery() {
         addScrollMargin();
+
+            // Primera imagen (0.jpg)
+            const zeroImg = document.createElement("img");
+      zeroImg.src = "img/0.jpg";
+      zeroImg.classList.add("profilePic");
+      gallery.appendChild(zeroImg);
+
+      // Resto de imágenes (1.png … cantidadDeFotos.png)
+      for (let i = cantidadDeFotos; i > 0; i--) {
+        const img = document.createElement("img");
+        img.src = `img/${i}.png`;
+        img.classList.add("profilePic");
+        gallery.appendChild(img);
+      }
 
         for (i = cantidadDeFotos; i > 0; i--) {
             let image = document.createElement("img");
@@ -138,19 +118,52 @@
         }
 
         addScrollMargin();
+    }
 
-        //in case the window is resized this will run so that the margins stay their correct size
-        //this has to be done with a loop bc we need to change both the start and end margins (thats why we use querySelectorAll)
+    // Encuentra la imagen cuyo centro está más cercano al centro del viewport
+    function updateCurrentImage() {
+      const images = document.querySelectorAll('.profilePic');
+      const galleryRect = gallery.getBoundingClientRect();
+      const galleryCenterX = galleryRect.left + galleryRect.width / 2;
 
-        addEventListener("resize", (event) => { });
-        onresize = (event) => {
-            let galleryMargin = document.querySelectorAll(".galleryMargin");
+      let closestImg = null;
+      let minDiff = Infinity;
 
-            for (let i = 0; i < galleryMargin.length; i++) {
-                galleryMargin[i].style.margin = `${calculateMargin() / 2}px`;
-            }
-        };
+      images.forEach(img => {
+        const rect = img.getBoundingClientRect();
+        const imgCenterX = rect.left + rect.width / 2;
+        const diff = Math.abs(imgCenterX - galleryCenterX);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestImg = img;
+        }
+      });
 
+      if (closestImg) {
+        const src = closestImg.getAttribute('src');
+        const match = src.match(/\/(\d+)\.\w+$/);
+        const num = match ? match[1] : '';
+        currentNumberEl.textContent = num;
+      }
+    }
+
+    // Inicializamos
+    populateGallery();
+    updateCurrentImage();
+
+    // Listeners
+    gallery.addEventListener('scroll', () => {
+      // opcional: podrías "throttlear" esta llamada si es necesario
+      updateCurrentImage();
+    });
+
+    window.addEventListener('resize', () => {
+      // recalcula márgenes y número al cambiar el tamaño
+      document.querySelectorAll('.galleryMargin').forEach(m => {
+        m.style.width = `${calculateMargin()}px`;
+      });
+      updateCurrentImage();
+    });
     </script>
 </body>
 
