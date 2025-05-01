@@ -19,15 +19,27 @@
 
     /* Indicador fijo encima de la galería */
     #current-number {
-      position: fixed;
-      top: calc(50% - 256px - 30px); /* 256px = 512/2 de la galería, + 30px de separación */
-      left: 0;
-      width: 100%;
-      text-align: center;
-      font-size: 24px;
-      font-weight: 700;
-      color: #555;
-      pointer-events: none;
+    position: fixed;
+    bottom: calc(40% - 256px - 30px);
+    left: 0;
+    width: 100%;
+    text-align: center;
+    font-size: 5em;
+    font-weight: 700;
+    color: #555;
+    pointer-events: none;
+    }
+
+    #arrow {
+    position: fixed;
+    top: calc(40% - 256px - 30px);
+    left: 0;
+    width: 100%;
+    text-align: center;
+    font-size: 5em;
+    font-weight: 700;
+    color: #555;
+    pointer-events: none;
     }
 
     /* La galería centrada verticalmente */
@@ -62,6 +74,7 @@
   </style>
 </head>
 <body>
+  <div id="arrow">⬇️</div>
   <div id="current-number">0</div>
   <div class="gallery"></div>
 
