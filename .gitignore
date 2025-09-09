@@ -1,0 +1,12 @@
+# Virtualenv
+.venv/
+
+# Sesiones de Telethon (muy sensibles)
+*.session
+*.session-journal
+
+# Copia real con tus credenciales
+get_telegram_profile_photos.sh
+
+# Archivos de sistema
+.DS_Store

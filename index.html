@@ -1,46 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Profile Pics Gallery</title>
 
+<head>
+  <meta charset="UTF-8" />
+  <title>Profile Pics Gallery (images + videos)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Agdasima:wght@400;700&display=swap" rel="stylesheet">
-
   <style>
     body {
       margin: 0;
-      padding: 0;
       font-family: "Agdasima", sans-serif;
       background: #fafafa;
-      overflow: hidden; /* evitamos scroll vertical en body */
+      overflow: hidden;
     }
 
-    /* Loader full-screen */
     #loader {
       position: fixed;
-      top: 0; left: 0;
-      width: 100vw; height: 100vh;
+      inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #fafafa;
       font-size: 2rem;
-      z-index: 100;
+      background: #fafafa;
     }
 
-    /* Ocultamos galería e indicadores hasta el load */
     .gallery,
     #current-number,
     #arrow {
       visibility: hidden;
     }
 
-    /* Indicador fijo encima de la galería */
-    #current-number {
+    #current-number,
+    #arrow {
       position: fixed;
-      bottom: calc(40% - 256px - 30px);
       left: 0;
       width: 100%;
       text-align: center;
@@ -48,21 +42,16 @@
       font-weight: 700;
       color: #555;
       pointer-events: none;
+    }
+
+    #current-number {
+      bottom: calc(40% - 256px - 30px);
     }
 
     #arrow {
-      position: fixed;
       top: calc(40% - 256px - 30px);
-      left: 0;
-      width: 100%;
-      text-align: center;
-      font-size: 5em;
-      font-weight: 700;
-      color: #555;
-      pointer-events: none;
     }
 
-    /* La galería centrada verticalmente */
     .gallery {
       position: fixed;
       top: 50%;
@@ -77,15 +66,27 @@
       scroll-behavior: smooth;
       -webkit-overflow-scrolling: touch;
     }
-    .gallery::-webkit-scrollbar { display: none; }
 
-    .profilePic {
+    .gallery::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tile {
       flex: 0 0 auto;
       width: 512px;
       height: 512px;
-      object-fit: cover;
       border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      background: #ddd;
+    }
+
+    .tile img,
+    .tile video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
 
     .galleryMargin {
@@ -93,88 +94,105 @@
     }
   </style>
 </head>
-<body>
-  <!-- Loader -->
-  <div id="loader">Cargando…</div>
 
-  <!-- Indicadores y galería (ocultos hasta que cargue todo) -->
+<body>
+  <div id="loader">Cargando…</div>
   <div id="arrow">⬇️</div>
   <div id="current-number">0</div>
   <div class="gallery"></div>
 
   <script>
-    const cantidadDeFotos = 443;
     const imgWidth = 512;
     const gallery = document.querySelector(".gallery");
     const currentNumberEl = document.getElementById("current-number");
 
-    function calculateMargin() {
-      const vw = document.documentElement.clientWidth;
-      return (vw - imgWidth) / 2;
-    }
+    const marginPx = () => (document.documentElement.clientWidth - imgWidth) / 2;
 
     function addScrollMargin() {
       const m = document.createElement("div");
-      m.classList.add("galleryMargin");
-      m.style.width = `${calculateMargin()}px`;
+      m.className = "galleryMargin";
+      m.style.width = `${marginPx()}px`;
       gallery.appendChild(m);
     }
 
-    function populateGallery() {
-      addScrollMargin();
-      for (let i = cantidadDeFotos; i > 0; i--) {
-        const img = document.createElement("img");
-        img.src = `img/${i}.png`;
-        img.classList.add("profilePic");
-        gallery.appendChild(img);
-      }
-      const zero = document.createElement("img");
-      zero.src = "img/0.jpg";
-      zero.classList.add("profilePic");
-      gallery.appendChild(zero);
-      addScrollMargin();
-    }
-
-    function updateCurrentImage() {
-      const images = document.querySelectorAll('.profilePic');
+    function updateCurrent() {
+      const tiles = document.querySelectorAll('.tile');
       const rect = gallery.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       let closest = null, minDiff = Infinity;
-      images.forEach(img => {
-        const r2 = img.getBoundingClientRect();
-        const imgCenter = r2.left + r2.width / 2;
-        const d = Math.abs(imgCenter - centerX);
-        if (d < minDiff) {
-          minDiff = d;
-          closest = img;
-        }
+      tiles.forEach(tile => {
+        const r2 = tile.getBoundingClientRect();
+        const tileCenter = r2.left + r2.width / 2;
+        const d = Math.abs(tileCenter - centerX);
+        if (d < minDiff) { minDiff = d; closest = tile; }
       });
       if (closest) {
-        const match = closest.src.match(/\/(\d+)\.\w+$/);
-        currentNumberEl.textContent = match ? match[1] : '';
+        const idx = closest.getAttribute('data-idx');
+        currentNumberEl.textContent = idx ?? '';
       }
     }
 
-    function initGallery() {
-      populateGallery();
-      updateCurrentImage();
-      gallery.addEventListener('scroll', updateCurrentImage);
-      window.addEventListener('resize', () => {
-        document.querySelectorAll('.galleryMargin')
-                .forEach(m => m.style.width = `${calculateMargin()}px`);
-        updateCurrentImage();
-      });
+    function centerTile(tile) {
+      if (!tile) return;
+      const g = gallery;
+      const left = tile.offsetLeft - (g.clientWidth - tile.clientWidth) / 2;
+      g.scrollTo({ left, behavior: 'instant' });
     }
 
-    // Espera a que TO-DAS las imágenes y recursos estén listos
-    window.addEventListener('load', () => {
-      // Oculta loader y muestra contenido
-      document.getElementById('loader').style.display = 'none';
-      document.querySelectorAll('.gallery, #current-number, #arrow')
-              .forEach(el => el.style.visibility = 'visible');
-      // Arranca la galería
-      initGallery();
-    });
+    function jumpToLast() {
+      const tiles = document.querySelectorAll('.tile');
+      if (tiles.length) {
+        centerTile(tiles[tiles.length - 1]);
+        updateCurrent();
+      }
+    }
+
+    async function init() {
+      try {
+        const res = await fetch('img/manifest.json', { cache: 'no-cache' });
+        const manifest = await res.json();
+        addScrollMargin();
+        for (const item of manifest.items) {
+          const tile = document.createElement('div');
+          tile.className = 'tile';
+          tile.setAttribute('data-idx', item.i);
+          if (item.type === 'video') {
+            const v = document.createElement('video');
+            v.src = `img/${item.file}`;
+            v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
+            tile.appendChild(v);
+          } else {
+            const img = new Image();
+            img.src = `img/${item.file}`;
+            tile.appendChild(img);
+          }
+          gallery.appendChild(tile);
+        }
+        addScrollMargin();
+        // Colocar el scroll inicial en el ÚLTIMO elemento (el más reciente)
+        // Esperamos al próximo frame para asegurar que el layout está listo
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            jumpToLast();
+          });
+        });
+        gallery.addEventListener('scroll', updateCurrent);
+        window.addEventListener('resize', () => {
+          document.querySelectorAll('.galleryMargin')
+            .forEach(m => m.style.width = `${marginPx()}px`);
+          updateCurrent();
+        });
+      } catch (e) {
+        document.getElementById('loader').textContent = 'No se encontró img/manifest.json. Ejecuta el script primero.';
+        return;
+      } finally {
+        document.getElementById('loader').style.display = 'none';
+        document.querySelectorAll('.gallery, #current-number, #arrow')
+          .forEach(el => el.style.visibility = 'visible');
+      }
+    }
+    window.addEventListener('load', init);
   </script>
 </body>
+
 </html>
