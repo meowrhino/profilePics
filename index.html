@@ -11,8 +11,13 @@
   <style>
     body {
       margin: 0;
+      min-height: 100vh;
       font-family: "Agdasima", sans-serif;
-      background: #222;
+      background-color: #1a1a1a;
+      background-image:
+        radial-gradient(ellipse at center, #1a1a1a 40%, transparent 70%),
+        radial-gradient(circle, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+      background-size: 100% 100%, 22px 22px;
       overflow: hidden;
     }
 
@@ -23,12 +28,24 @@
       align-items: center;
       justify-content: center;
       font-size: 2rem;
-      background: #fafafa;
+      background: #1a1a1a;
+      color: #555;
+      z-index: 10;
+    }
+
+    #loader span {
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
     }
 
     .gallery,
     #current-number,
-    #arrow {
+    #arrow,
+    #progress {
       visibility: hidden;
     }
 
@@ -40,16 +57,24 @@
       text-align: center;
       font-size: 5em;
       font-weight: 700;
-      color: #ff0;
+      color: #ffe600;
       pointer-events: none;
+      text-shadow: 0 2px 24px rgba(255, 230, 0, 0.25);
     }
 
     #current-number {
       bottom: 10vh;
+      transition: color 0.15s, text-shadow 0.15s;
+    }
+
+    #current-number.error {
+      color: #ff3333;
+      text-shadow: 0 2px 24px rgba(255, 50, 50, 0.4);
     }
 
     #arrow {
       top: 10vh;
+      opacity: 0.5;
     }
 
     .gallery {
@@ -63,7 +88,6 @@
       gap: 10vw;
       overflow-x: auto;
       overflow-y: hidden;
-      scroll-behavior: smooth;
       -webkit-overflow-scrolling: touch;
     }
 
@@ -76,7 +100,14 @@
       width: 40vh;
       height: 40vh;
       overflow: hidden;
-      background: #ddd;
+      background: #2a2a2a;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      cursor: pointer;
+    }
+
+    .tile:hover {
+      transform: scale(1.04);
+      box-shadow: 0 0 28px rgba(255, 230, 0, 0.15);
     }
 
     .tile img,
@@ -90,21 +121,82 @@
     .galleryMargin {
       flex: 0 0 auto;
     }
+
+    #progress {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #ffe600, #ffb300);
+      width: 0;
+      transition: width 0.1s linear;
+      opacity: 0.7;
+      z-index: 5;
+    }
+
   </style>
 </head>
 
 <body>
-  <div id="loader">Cargando…</div>
+  <div id="loader"><span>Cargando…</span></div>
   <div id="arrow">⬇</div>
   <div id="current-number">0</div>
   <div class="gallery"></div>
+  <div id="progress"></div>
 
   <script>
     const imgWidth = 512;
     const gallery = document.querySelector(".gallery");
     const currentNumberEl = document.getElementById("current-number");
+    const progressEl = document.getElementById("progress");
+
+    let allTiles = [];
+    let targetIdx = -1;
+    let scrollAnim = null;
+    let isAnimating = false;
+    let hashUpdateTimer = null;
+    let numberInput = '';
+    let numberTimer = null;
 
     const marginPx = () => (document.documentElement.clientWidth - imgWidth) / 2;
+
+    function easeOutExpo(t) {
+      return t === 1 ? 1 : 1 - Math.pow(2, -12 * t);
+    }
+
+    function animateScrollTo(targetLeft) {
+      if (scrollAnim) cancelAnimationFrame(scrollAnim);
+      isAnimating = true;
+      const start = gallery.scrollLeft;
+      const diff = targetLeft - start;
+      if (Math.abs(diff) < 1) { isAnimating = false; return; }
+      const duration = Math.min(1200, Math.max(400, Math.log2(Math.abs(diff) + 1) * 70));
+      const startTime = performance.now();
+      function step(now) {
+        const progress = Math.min((now - startTime) / duration, 1);
+        gallery.scrollLeft = start + diff * easeOutExpo(progress);
+        if (progress < 1) {
+          scrollAnim = requestAnimationFrame(step);
+        } else {
+          isAnimating = false;
+          scrollAnim = null;
+        }
+      }
+      scrollAnim = requestAnimationFrame(step);
+    }
+
+    function centerTile(tile, instant) {
+      if (!tile) return;
+      const left = tile.offsetLeft - (gallery.clientWidth - tile.clientWidth) / 2;
+      if (instant) {
+        if (scrollAnim) cancelAnimationFrame(scrollAnim);
+        isAnimating = false;
+        scrollAnim = null;
+        gallery.scrollLeft = left;
+      } else {
+        animateScrollTo(left);
+      }
+    }
 
     function addScrollMargin() {
       const m = document.createElement("div");
@@ -113,36 +205,112 @@
       gallery.appendChild(m);
     }
 
-    function updateCurrent() {
-      const tiles = document.querySelectorAll('.tile');
+    function findClosestIdx() {
       const rect = gallery.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      let closest = null, minDiff = Infinity;
-      tiles.forEach(tile => {
-        const r2 = tile.getBoundingClientRect();
-        const tileCenter = r2.left + r2.width / 2;
-        const d = Math.abs(tileCenter - centerX);
-        if (d < minDiff) { minDiff = d; closest = tile; }
+      const cx = rect.left + rect.width / 2;
+      let best = 0, minD = Infinity;
+      allTiles.forEach((t, i) => {
+        const r = t.getBoundingClientRect();
+        const d = Math.abs(r.left + r.width / 2 - cx);
+        if (d < minD) { minD = d; best = i; }
       });
-      if (closest) {
-        const idx = closest.getAttribute('data-idx');
-        currentNumberEl.textContent = idx ?? '';
+      return best;
+    }
+
+    function updateCurrent() {
+      if (!allTiles.length) return;
+      const ci = findClosestIdx();
+      if (!isAnimating) targetIdx = ci;
+      const idx = allTiles[ci].getAttribute('data-idx') ?? '';
+      if (!numberInput) currentNumberEl.textContent = idx;
+      clearTimeout(hashUpdateTimer);
+      hashUpdateTimer = setTimeout(() => {
+        history.replaceState(null, '', `#${idx}`);
+      }, 300);
+      const maxScroll = gallery.scrollWidth - gallery.clientWidth;
+      if (maxScroll > 0) {
+        progressEl.style.width = `${(gallery.scrollLeft / maxScroll) * 100}%`;
       }
     }
 
-    function centerTile(tile) {
-      if (!tile) return;
-      const g = gallery;
-      const left = tile.offsetLeft - (g.clientWidth - tile.clientWidth) / 2;
-      g.scrollTo({ left, behavior: 'instant' });
+    function goToIndex(idx, instant) {
+      const tile = document.querySelector(`.tile[data-idx="${idx}"]`);
+      if (tile) {
+        targetIdx = allTiles.indexOf(tile);
+        centerTile(tile, instant);
+        updateCurrent();
+      }
     }
 
     function jumpToLast() {
-      const tiles = document.querySelectorAll('.tile');
-      if (tiles.length) {
-        centerTile(tiles[tiles.length - 1]);
-        updateCurrent();
+      if (!allTiles.length) return;
+      targetIdx = allTiles.length - 1;
+      centerTile(allTiles[targetIdx], true);
+      updateCurrent();
+    }
+
+    function navigateTile(direction) {
+      if (!allTiles.length) return;
+      if (targetIdx < 0) targetIdx = findClosestIdx();
+      targetIdx = Math.max(0, Math.min(allTiles.length - 1, targetIdx + direction));
+      centerTile(allTiles[targetIdx]);
+      for (let off = -2; off <= 2; off++) {
+        const pi = targetIdx + off;
+        if (pi >= 0 && pi < allTiles.length) {
+          const img = allTiles[pi].querySelector('img[loading="lazy"]');
+          if (img) img.loading = 'eager';
+        }
       }
+    }
+
+    let shuffleAnim = null;
+
+    function stopShuffle() {
+      if (shuffleAnim) cancelAnimationFrame(shuffleAnim);
+      shuffleAnim = null;
+      currentNumberEl.classList.remove('error');
+    }
+
+    function shuffleThenGo() {
+      const maxIdx = allTiles.length - 1;
+      const finalIdx = Math.floor(Math.random() * allTiles.length);
+      const totalMs = 1200;
+      const startTime = performance.now();
+      currentNumberEl.classList.add('error');
+
+      function tick(now) {
+        const elapsed = now - startTime;
+        if (elapsed < totalMs) {
+          // Slow down: interval grows from 30ms to 150ms
+          const speed = 30 + 120 * (elapsed / totalMs);
+          currentNumberEl.textContent = Math.floor(Math.random() * (maxIdx + 1));
+          shuffleAnim = setTimeout(() => {
+            shuffleAnim = requestAnimationFrame(tick);
+          }, speed);
+        } else {
+          currentNumberEl.classList.remove('error');
+          currentNumberEl.textContent = finalIdx;
+          shuffleAnim = null;
+          goToIndex(String(finalIdx));
+        }
+      }
+      shuffleAnim = requestAnimationFrame(tick);
+    }
+
+    function handleDigit(d) {
+      stopShuffle();
+      numberInput += d;
+      currentNumberEl.textContent = numberInput;
+      clearTimeout(numberTimer);
+      numberTimer = setTimeout(() => {
+        const val = numberInput;
+        numberInput = '';
+        if (document.querySelector(`.tile[data-idx="${val}"]`)) {
+          goToIndex(val);
+        } else {
+          shuffleThenGo();
+        }
+      }, 800);
     }
 
     async function init() {
@@ -154,6 +322,10 @@
           const tile = document.createElement('div');
           tile.className = 'tile';
           tile.setAttribute('data-idx', item.i);
+          tile.addEventListener('click', () => {
+            targetIdx = allTiles.indexOf(tile);
+            centerTile(tile);
+          });
           if (item.type === 'video') {
             const v = document.createElement('video');
             v.src = `img/${item.file}`;
@@ -162,16 +334,21 @@
           } else {
             const img = new Image();
             img.src = `img/${item.file}`;
+            img.loading = 'lazy';
             tile.appendChild(img);
           }
           gallery.appendChild(tile);
         }
+        allTiles = [...document.querySelectorAll('.tile')];
         addScrollMargin();
-        // Colocar el scroll inicial en el ÚLTIMO elemento (el más reciente)
-        // Esperamos al próximo frame para asegurar que el layout está listo
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            jumpToLast();
+            const hash = location.hash.slice(1);
+            if (hash && document.querySelector(`.tile[data-idx="${hash}"]`)) {
+              goToIndex(hash, true);
+            } else {
+              jumpToLast();
+            }
           });
         });
         gallery.addEventListener('scroll', updateCurrent);
@@ -180,12 +357,29 @@
             .forEach(m => m.style.width = `${marginPx()}px`);
           updateCurrent();
         });
+        window.addEventListener('hashchange', () => {
+          const idx = location.hash.slice(1);
+          if (idx) goToIndex(idx);
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key >= '0' && e.key <= '9') { handleDigit(e.key); return; }
+          if (e.key === 'Escape' && numberInput) {
+            numberInput = '';
+            clearTimeout(numberTimer);
+            updateCurrent();
+            return;
+          }
+          if (e.key === 'ArrowRight') navigateTile(1);
+          else if (e.key === 'ArrowLeft') navigateTile(-1);
+          else if (e.key === 'Home') { e.preventDefault(); targetIdx = 0; centerTile(allTiles[0]); }
+          else if (e.key === 'End') { e.preventDefault(); targetIdx = allTiles.length - 1; centerTile(allTiles[targetIdx]); }
+        });
       } catch (e) {
         document.getElementById('loader').textContent = 'No se encontró img/manifest.json. Ejecuta el script primero.';
         return;
       } finally {
         document.getElementById('loader').style.display = 'none';
-        document.querySelectorAll('.gallery, #current-number, #arrow')
+        document.querySelectorAll('.gallery, #current-number, #arrow, #progress')
           .forEach(el => el.style.visibility = 'visible');
       }
     }
