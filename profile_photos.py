@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, PhoneNumberInvalidError
 from PIL import Image
@@ -39,6 +40,16 @@ async def run(args):
     await client.connect()
     try:
         if not await client.is_user_authorized():
+            # En CI no hay stdin interactivo: fallar pronto y claro.
+            if os.environ.get("CI") or not sys.stdin.isatty():
+                await client.disconnect()
+                raise SystemExit(
+                    "❌ Sesión de Telethon no autorizada. "
+                    "Regenera la sesión localmente y actualiza el secret TELEGRAM_SESSION_B64. "
+                    "Pasos: borra telegram_profile_session.session, ejecuta el script en local, "
+                    "introduce el código que llegue por Telegram, y luego "
+                    "`base64 -i telegram_profile_session.session | pbcopy` → pega en el secret."
+                )
             try:
                 await client.send_code_request(phone)
             except PhoneNumberInvalidError:
