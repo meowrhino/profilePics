@@ -1,0 +1,16 @@
+# Ficheros que NO se suben como assets del Worker (solo se sirve la web)
+.git
+.github
+.wrangler
+.venv
+node_modules
+*.session
+*.session-journal
+*.py
+*.sh
+*.md
+.gitignore
+.DS_Store
+.assetsignore
+wrangler.jsonc
+CNAME

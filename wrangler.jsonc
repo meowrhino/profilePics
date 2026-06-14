@@ -1,0 +1,13 @@
+{
+  // Worker de "static assets": sirve el sitio estático (index.html, img/, js/, favicon/)
+  // No necesita script: Cloudflare sirve los ficheros directamente.
+  "name": "profilepics",
+  "compatibility_date": "2025-05-01",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./"
+  },
+  "routes": [
+    { "pattern": "profile.meowrhino.studio", "custom_domain": true }
+  ]
+}
