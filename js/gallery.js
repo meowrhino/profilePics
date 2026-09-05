@@ -7,7 +7,30 @@
   const currentNumberEl = document.getElementById("current-number");
   const progressEl = document.getElementById("progress");
 
+  // ── Smart loading config ───────────────────────────────
+  // HOT:  se cargan ya, con máxima prioridad
+  // WARM: se encolan para precargar (desde el centro hacia ambos lados)
+  // KEEP: fuera de este radio se descarga el src y se libera memoria
+  const HOT = 3;
+  const WARM = 14;
+  const KEEP = 50;
+  const MAX_PARALLEL = 6;
+  // Por encima de esta velocidad de scroll no se precarga: las estás sobrevolando.
+  const FAST_TILES_PER_SEC = 25;
+  const SETTLE_MS = 180;
+
   let allTiles = [];
+  let media = [];          // { i, type, file, tile, el, state }
+  let offsets = [];        // centro horizontal de cada tile (coords de scroll)
+  let queue = [];          // media pendientes, ya ordenadas por prioridad
+  const inFlight = new Set();
+  const active = new Set(); // media con src puesto (loading o loaded)
+  let focusIdx = 0;
+  let scheduleRaf = null;
+  let settleTimer = null;
+  let lastFocus = -1;
+  let lastFocusT = 0;
+
   let targetIdx = -1;
   let scrollAnim = null;
   let isAnimating = false;
@@ -56,6 +79,8 @@
     } else {
       animateScrollTo(left);
     }
+    // Prioriza el destino, no los mil tiles por los que pasamos de camino.
+    scheduleAround(allTiles.indexOf(tile));
   }
 
   // ── Layout ─────────────────────────────────────────────
@@ -69,18 +94,135 @@
     gallery.appendChild(m);
   }
 
+  function measure() {
+    offsets = allTiles.map(t => t.offsetLeft + t.offsetWidth / 2);
+  }
+
+  // ── Media loading queue ────────────────────────────────
+
+  function startLoad(m) {
+    if (m.state !== 'idle') return;
+    m.state = 'loading';
+    inFlight.add(m);
+    active.add(m);
+    const el = m.el;
+    const done = () => { release(m, 'loaded'); };
+    const fail = () => { release(m, 'error'); };
+    // Lo que está justo delante de tus ojos se pide antes que el anillo de precarga.
+    const hot = Math.abs(m.i - focusIdx) <= HOT;
+    if (m.type === 'video') {
+      el.addEventListener('loadeddata', done, { once: true });
+      el.addEventListener('error', fail, { once: true });
+      el.preload = 'auto';
+      el.src = `img/${m.file}`;
+      el.load();
+      el.play().catch(() => { });
+    } else {
+      el.onload = done;
+      el.onerror = fail;
+      el.fetchPriority = hot ? 'high' : 'low';
+      el.src = `img/${m.file}`;
+    }
+  }
+
+  function release(m, state) {
+    m.state = state;
+    inFlight.delete(m);
+    if (state === 'loaded') m.tile.classList.add('loaded');
+    pump();
+  }
+
+  // Suelta el src: aborta la descarga si iba a medias, libera memoria si ya estaba.
+  function unload(m) {
+    if (m.state === 'idle') return;
+    const el = m.el;
+    if (m.type === 'video') {
+      el.pause();
+      el.removeAttribute('src');
+      el.load();
+    } else {
+      el.onload = el.onerror = null;
+      el.removeAttribute('src');
+    }
+    m.tile.classList.remove('loaded');
+    m.state = 'idle';
+    inFlight.delete(m);
+    active.delete(m);
+  }
+
+  function pump() {
+    while (inFlight.size < MAX_PARALLEL && queue.length) {
+      const m = queue.shift();
+      if (m.state === 'idle') startLoad(m);
+    }
+  }
+
+  // Reconstruye la cola desde `center` hacia fuera, alternando ambos lados.
+  function scheduleAround(center, warm = WARM) {
+    if (!media.length) return;
+    if (center < 0 || center >= media.length) return;
+    focusIdx = center;
+
+    // 1. Cancela lo que sigue descargando pero ya no interesa.
+    for (const m of [...inFlight]) {
+      if (Math.abs(m.i - center) > WARM) unload(m);
+    }
+    // 2. Libera memoria fuera del radio de retención.
+    for (const m of [...active]) {
+      if (Math.abs(m.i - center) > KEEP) unload(m);
+    }
+    // 3. Cola nueva: centro primero, luego 1 a cada lado, luego 2, etc.
+    queue = [];
+    const push = (i) => {
+      if (i < 0 || i >= media.length) return;
+      if (media[i].state === 'idle') queue.push(media[i]);
+    };
+    push(center);
+    for (let d = 1; d <= warm; d++) { push(center + d); push(center - d); }
+    pump();
+  }
+
+  function scheduleSoon() {
+    if (scheduleRaf) return;
+    scheduleRaf = requestAnimationFrame(() => {
+      scheduleRaf = null;
+      // Durante una animación de scroll manda el destino; si no, el centro real.
+      const animating = isAnimating && targetIdx >= 0;
+      const center = animating ? targetIdx : findClosestIdx();
+      const now = performance.now();
+      const speed = (animating || lastFocus < 0)
+        ? 0
+        : Math.abs(center - lastFocus) / Math.max(1, now - lastFocusT) * 1000;
+      lastFocus = center;
+      lastFocusT = now;
+
+      clearTimeout(settleTimer);
+      if (speed > FAST_TILES_PER_SEC) {
+        // Vas lanzado: solo el centro, y el anillo cuando frenes.
+        scheduleAround(center, 0);
+        settleTimer = setTimeout(() => {
+          lastFocus = -1;
+          scheduleAround(findClosestIdx());
+        }, SETTLE_MS);
+      } else {
+        scheduleAround(center);
+      }
+    });
+  }
+
   // ── Navigation ─────────────────────────────────────────
 
+  // Búsqueda binaria sobre offsets cacheados (antes: 1091 getBoundingClientRect por scroll).
   function findClosestIdx() {
-    const rect = gallery.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    let best = 0, minD = Infinity;
-    allTiles.forEach((t, i) => {
-      const r = t.getBoundingClientRect();
-      const d = Math.abs(r.left + r.width / 2 - cx);
-      if (d < minD) { minD = d; best = i; }
-    });
-    return best;
+    if (!offsets.length) return 0;
+    const target = gallery.scrollLeft + gallery.clientWidth / 2;
+    let lo = 0, hi = offsets.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (offsets[mid] < target) lo = mid + 1; else hi = mid;
+    }
+    if (lo > 0 && Math.abs(offsets[lo - 1] - target) < Math.abs(offsets[lo] - target)) lo--;
+    return lo;
   }
 
   function updateCurrent() {
@@ -97,6 +239,7 @@
     if (maxScroll > 0) {
       progressEl.style.width = `${(gallery.scrollLeft / maxScroll) * 100}%`;
     }
+    scheduleSoon();
   }
 
   function goToIndex(idx, instant) {
@@ -120,13 +263,6 @@
     if (targetIdx < 0) targetIdx = findClosestIdx();
     targetIdx = Math.max(0, Math.min(allTiles.length - 1, targetIdx + direction));
     centerTile(allTiles[targetIdx]);
-    for (let off = -2; off <= 2; off++) {
-      const pi = targetIdx + off;
-      if (pi >= 0 && pi < allTiles.length) {
-        const img = allTiles[pi].querySelector('img[loading="lazy"]');
-        if (img) img.loading = 'eager';
-      }
-    }
   }
 
   // ── Shuffle animation ──────────────────────────────────
@@ -143,6 +279,8 @@
     const totalMs = 1200;
     const startTime = performance.now();
     currentNumberEl.classList.add('error');
+    // Ve pidiendo el destino mientras rueda el contador.
+    scheduleAround(finalIdx);
 
     function tick(now) {
       const elapsed = now - startTime;
@@ -198,7 +336,7 @@
       const res = await fetch('img/manifest.json', { cache: 'no-cache' });
       const manifest = await res.json();
       addScrollMargin();
-      for (const item of manifest.items) {
+      manifest.items.forEach((item, i) => {
         const tile = document.createElement('div');
         tile.className = 'tile';
         tile.setAttribute('data-idx', item.i);
@@ -206,35 +344,41 @@
           targetIdx = allTiles.indexOf(tile);
           centerTile(tile);
         });
+        // Sin src: nadie descarga nada hasta que el planificador lo pide.
+        let el;
         if (item.type === 'video') {
-          const v = document.createElement('video');
-          v.src = `img/${item.file}`;
-          v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
-          tile.appendChild(v);
+          el = document.createElement('video');
+          el.preload = 'none';
+          el.loop = true; el.muted = true; el.playsInline = true;
         } else {
-          const img = new Image();
-          img.src = `img/${item.file}`;
-          img.loading = 'lazy';
-          tile.appendChild(img);
+          el = document.createElement('img');
+          el.decoding = 'async';
+          el.alt = '';
         }
+        tile.appendChild(el);
         gallery.appendChild(tile);
-      }
+        media.push({ i, type: item.type, file: item.file, tile, el, state: 'idle' });
+      });
       allTiles = [...document.querySelectorAll('.tile')];
       addScrollMargin();
+      measure();
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          measure();
           const hash = location.hash.slice(1);
           if (hash && document.querySelector(`.tile[data-idx="${hash}"]`)) {
             goToIndex(hash, true);
           } else {
+            // Sin hash arrancamos por la última: la carga va de la última hacia atrás.
             jumpToLast();
           }
         });
       });
-      gallery.addEventListener('scroll', updateCurrent);
+      gallery.addEventListener('scroll', updateCurrent, { passive: true });
       window.addEventListener('resize', () => {
         document.querySelectorAll('.galleryMargin')
           .forEach(m => m.style.width = `${marginPx()}px`);
+        measure();
         updateCurrent();
       });
       window.addEventListener('hashchange', () => {
@@ -266,11 +410,14 @@
 
   // ── Public API (for plugins) ───────────────────────────
 
+  // Object.assign copiaría el valor del getter, no el getter: hay que definirlos.
   window.Gallery = window.Gallery || {};
-  Object.assign(window.Gallery, {
-    goToIndex,
-    shuffleThenGo,
-    get tileCount() { return allTiles.length; },
+  window.Gallery.goToIndex = goToIndex;
+  window.Gallery.shuffleThenGo = shuffleThenGo;
+  Object.defineProperties(window.Gallery, {
+    tileCount: { get: () => allTiles.length, configurable: true },
+    focusIndex: { get: () => focusIdx, configurable: true },
+    pending: { get: () => queue.length, configurable: true },
   });
 
   window.addEventListener('load', init);
