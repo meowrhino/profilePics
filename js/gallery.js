@@ -85,13 +85,27 @@
 
   // ── Layout ─────────────────────────────────────────────
 
-  const marginPx = () => (document.documentElement.clientWidth - imgWidth) / 2;
+  // El tile mide 40vh, no `imgWidth`: con un ancho fijo el margen sale corto
+  // (y negativo en móvil, donde el navegador lo ignora y deja 0).
+  const tileWidth = () => {
+    const t = gallery.querySelector('.tile');
+    return t ? t.getBoundingClientRect().width : imgWidth;
+  };
+  const marginPx = () => Math.max(0, (gallery.clientWidth - tileWidth()) / 2);
 
-  function addScrollMargin() {
-    const m = document.createElement("div");
-    m.className = "galleryMargin";
-    m.style.width = `${marginPx()}px`;
-    gallery.appendChild(m);
+  function sizeScrollMargins() {
+    const w = `${marginPx()}px`;
+    gallery.querySelectorAll('.galleryMargin').forEach(m => { m.style.width = w; });
+  }
+
+  // Se insertan cuando ya hay tiles, para poder medir uno de verdad.
+  function addScrollMargins() {
+    const before = document.createElement('div');
+    const after = document.createElement('div');
+    before.className = after.className = 'galleryMargin';
+    gallery.prepend(before);
+    gallery.appendChild(after);
+    sizeScrollMargins();
   }
 
   function measure() {
@@ -335,7 +349,6 @@
     try {
       const res = await fetch('img/manifest.json', { cache: 'no-cache' });
       const manifest = await res.json();
-      addScrollMargin();
       manifest.items.forEach((item, i) => {
         const tile = document.createElement('div');
         tile.className = 'tile';
@@ -360,7 +373,7 @@
         media.push({ i, type: item.type, file: item.file, tile, el, state: 'idle' });
       });
       allTiles = [...document.querySelectorAll('.tile')];
-      addScrollMargin();
+      addScrollMargins();
       measure();
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -376,8 +389,7 @@
       });
       gallery.addEventListener('scroll', updateCurrent, { passive: true });
       window.addEventListener('resize', () => {
-        document.querySelectorAll('.galleryMargin')
-          .forEach(m => m.style.width = `${marginPx()}px`);
+        sizeScrollMargins();
         measure();
         updateCurrent();
       });
@@ -420,5 +432,11 @@
     pending: { get: () => queue.length, configurable: true },
   });
 
-  window.addEventListener('load', init);
+  // `load` espera a TODO lo demás (la hoja de fuentes de Google incluida), así que
+  // la primera foto no se pedía hasta tener la fuente. Arrancamos en cuanto hay DOM.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
