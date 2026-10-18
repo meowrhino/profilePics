@@ -53,7 +53,9 @@ imagen.
 | `Enter` | confirma sin esperar |
 | `Esc` | cancela lo tecleado |
 | Clic en una foto | la centra |
-| Hover (con ratón) | la vuelve un círculo |
+| Hover (con ratón) | la vuelve un círculo y el número sale en naranja |
+| Móvil: tocar la del centro | círculo / cuadrado |
+| Móvil: tocar el número | abre el teclado numérico para saltar |
 
 La URL lleva el índice en el hash, así que `…/#987` es un enlace directo.
 

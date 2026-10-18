@@ -6,12 +6,15 @@
   const currentNumberEl = document.getElementById("current-number");
   const progressEl = document.getElementById("progress");
   const hintEl = document.getElementById("hint");
+  const jumpEl = document.getElementById("jump");
 
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const canHover = window.matchMedia("(hover: hover)");
 
   let allTiles = [];
   let margins = [];
   let currentTile = null;
+  let hoveredTile = null;
   let targetIdx = -1;
   let scrollAnim = null;
   let isAnimating = false;
@@ -146,13 +149,12 @@
     if (!isAnimating) targetIdx = ci;
 
     if (currentTile !== allTiles[ci]) {
-      if (currentTile) currentTile.classList.remove('is-current');
+      if (currentTile) currentTile.classList.remove('is-round');
       currentTile = allTiles[ci];
-      currentTile.classList.add('is-current');
     }
 
     const idx = allTiles[ci].getAttribute('data-idx') ?? '';
-    if (!userInput) currentNumberEl.textContent = idx;
+    renderNumber();
     clearTimeout(hashUpdateTimer);
     hashUpdateTimer = setTimeout(() => {
       history.replaceState(null, '', `#${idx}`);
@@ -161,6 +163,16 @@
     if (maxScroll > 0) {
       progressEl.style.width = `${(gallery.scrollLeft / maxScroll) * 100}%`;
     }
+  }
+
+  // El número enseña la foto señalada (con ratón, la de debajo) y se pone
+  // naranja si se está viendo en círculo.
+  function renderNumber() {
+    if (userInput) return;
+    const t = hoveredTile || currentTile;
+    if (!t) return;
+    currentNumberEl.textContent = t.dataset.idx;
+    currentNumberEl.classList.toggle('round', t === hoveredTile || t.classList.contains('is-round'));
   }
 
   function goToIndex(idx, instant) {
@@ -233,6 +245,8 @@
     clearTimeout(inputTimer);
     const val = userInput;
     userInput = '';
+    jumpEl.value = '';
+    jumpEl.blur();
     if (!val) return;
     const isNumeric = /^\d+$/.test(val);
     if (isNumeric && document.querySelector(`.tile[data-idx="${val}"]`)) {
@@ -248,8 +262,13 @@
   function handleInput(ch) {
     stopShuffle();
     hideHint();
-    userInput += ch;
-    currentNumberEl.textContent = userInput;
+    showTyped(userInput + ch);
+  }
+
+  function showTyped(val) {
+    userInput = val;
+    currentNumberEl.classList.remove('round');
+    currentNumberEl.textContent = val;
     clearTimeout(inputTimer);
     inputTimer = setTimeout(commitInput, 1500);
   }
@@ -293,6 +312,12 @@
         tile.className = 'tile';
         tile.setAttribute('data-idx', item.i);
         tile.addEventListener('click', () => {
+          // Táctil: tocar la del centro la pasa a círculo y vuelta.
+          if (tile === currentTile && !canHover.matches) {
+            tile.classList.toggle('is-round');
+            renderNumber();
+            return;
+          }
           targetIdx = allTiles.indexOf(tile);
           centerTile(tile);
         });
@@ -328,8 +353,30 @@
         });
       });
       gallery.addEventListener('scroll', updateCurrent);
+      gallery.addEventListener('pointerover', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        hoveredTile = e.target.closest('.tile');
+        renderNumber();
+      });
+      gallery.addEventListener('pointerleave', () => {
+        hoveredTile = null;
+        renderNumber();
+      });
+      // Táctil no tiene teclado: tocar el número abre el numérico del móvil.
+      currentNumberEl.addEventListener('click', () => {
+        stopShuffle();
+        jumpEl.value = '';
+        jumpEl.focus();
+      });
+      jumpEl.addEventListener('input', () => {
+        const v = jumpEl.value.replace(/\D/g, '');
+        jumpEl.value = v;
+        if (v) { stopShuffle(); showTyped(v); } else cancelInput();
+      });
+      jumpEl.addEventListener('blur', () => { if (userInput) commitInput(); });
       window.addEventListener('resize', () => {
         updateMargins();
+        centerTile(currentTile, true);   // girar el móvil no cambia de foto
         updateCurrent();
       });
       window.addEventListener('hashchange', () => {
@@ -337,6 +384,7 @@
         if (idx) goToIndex(idx);
       });
       document.addEventListener('keydown', (e) => {
+        if (e.target === jumpEl) { if (e.key === 'Enter') commitInput(); return; }
         if (e.key === 'Dead') return;
         if (e.key === 'Escape') { cancelInput(); return; }
         if (e.key === 'Enter') { if (userInput) commitInput(); return; }

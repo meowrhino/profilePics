@@ -93,6 +93,12 @@
       transition: color 0.15s, text-shadow 0.15s;
     }
 
+    /* Naranja = la foto señalada se está viendo en círculo. */
+    #current-number.round {
+      color: #ff9a1f;
+      text-shadow: 0 2px 24px rgba(255, 154, 31, 0.35);
+    }
+
     #current-number.error {
       color: #ff3333;
       text-shadow: 0 2px 24px rgba(255, 50, 50, 0.4);
@@ -135,22 +141,47 @@
       cursor: pointer;
     }
 
-    /* El círculo solo donde hay puntero real: en táctil el :hover se queda
-       pegado tras tocar y dejaría un tile redondo para siempre. */
+    /* Círculo como en Telegram: con ratón al pasar por encima; en táctil al
+       tocar la del centro (.is-round, lo pone gallery.js). El :hover va solo
+       con puntero real: en táctil se queda pegado tras tocar. */
+    .tile.is-round {
+      border-radius: 50%;
+      box-shadow: 0 0 34px rgba(255, 154, 31, 0.2);
+    }
+
     @media (hover: hover) {
       .tile:hover {
         border-radius: 50%;
-        box-shadow: 0 0 34px rgba(255, 230, 0, 0.18);
+        box-shadow: 0 0 34px rgba(255, 154, 31, 0.2);
       }
     }
 
-    /* Sin hover (móvil/tablet) el efecto no existiría, así que lo lleva
-       el tile centrado. */
+    /* Táctil: tocar el número abre el teclado numérico (ver #jump). */
     @media (hover: none) {
-      .tile.is-current {
-        border-radius: 50%;
-        box-shadow: 0 0 34px rgba(255, 230, 0, 0.18);
+      #current-number {
+        pointer-events: auto;
+        left: 50%;
+        width: auto;
+        padding: 0 0.3em;
+        transform: translateX(-50%);
       }
+
+      #hint {
+        display: none;
+      }
+    }
+
+    /* Fuera de la vista pero enfocable; 16px para que iOS no haga zoom. */
+    #jump {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      font-size: 16px;
+      border: 0;
+      padding: 0;
     }
 
     .tile img,
@@ -232,6 +263,7 @@
   <div class="gallery"></div>
   <div id="hint">escribe un número o una palabra · ← → para navegar</div>
   <div id="progress"></div>
+  <input id="jump" type="text" inputmode="numeric" pattern="[0-9]*" enterkeyhint="go" autocomplete="off" aria-label="Ir a la foto número" tabindex="-1">
 
   <script src="js/text2num.js"></script><!-- optional: remove to disable text input -->
   <script src="js/gallery.js"></script>
