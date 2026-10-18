@@ -2,19 +2,24 @@
 // Exposes window.Gallery for plugins
 
 (function () {
-  const imgWidth = 512;
   const gallery = document.querySelector(".gallery");
   const currentNumberEl = document.getElementById("current-number");
   const progressEl = document.getElementById("progress");
+  const hintEl = document.getElementById("hint");
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   let allTiles = [];
+  let margins = [];
+  let currentTile = null;
   let targetIdx = -1;
   let scrollAnim = null;
   let isAnimating = false;
   let hashUpdateTimer = null;
   let userInput = '';
   let inputTimer = null;
-  let shuffleAnim = null;
+  let shuffleTimer = null;
+  let shuffleRaf = null;
 
   // ── Easing ──────────────────────────────────────────────
 
@@ -26,6 +31,12 @@
 
   function animateScrollTo(targetLeft) {
     if (scrollAnim) cancelAnimationFrame(scrollAnim);
+    if (reduceMotion.matches) {
+      isAnimating = false;
+      scrollAnim = null;
+      gallery.scrollLeft = targetLeft;
+      return;
+    }
     isAnimating = true;
     const start = gallery.scrollLeft;
     const diff = targetLeft - start;
@@ -40,6 +51,7 @@
       } else {
         isAnimating = false;
         scrollAnim = null;
+        loadNearby();
       }
     }
     scrollAnim = requestAnimationFrame(step);
@@ -59,15 +71,60 @@
   }
 
   // ── Layout ─────────────────────────────────────────────
-
-  const marginPx = () => (document.documentElement.clientWidth - imgWidth) / 2;
+  // Los márgenes laterales dejan que el primer y el último tile lleguen
+  // al centro. Se miden del tile real: el ancho vive en el CSS (40vh) y
+  // hardcodearlo aquí lo desincroniza en cuanto cambia el viewport.
 
   function addScrollMargin() {
     const m = document.createElement("div");
     m.className = "galleryMargin";
-    m.style.width = `${marginPx()}px`;
     gallery.appendChild(m);
+    margins.push(m);
   }
+
+  function updateMargins() {
+    if (!allTiles.length) return;
+    const tileW = allTiles[0].getBoundingClientRect().width;
+    const gap = parseFloat(getComputedStyle(gallery).columnGap) || 0;
+    const w = Math.max(0, (gallery.clientWidth - tileW) / 2 - gap);
+    margins.forEach(m => { m.style.width = `${w}px`; });
+  }
+
+  // ── Fotos y vídeos bajo demanda ────────────────────────
+  // Nada lleva src hasta estar cerca del centro. Con loading="lazy" el
+  // navegador pedía primero las fotos 0, 1, 2… (están al principio del
+  // scroll antes de saltar a la última) y con poca red la última tardaba
+  // muchísimo. Los vídeos, además, se bajaban enteros (15 MB).
+  // Durante un salto animado no se pide nada: pasaría por cientos de fotos.
+
+  const nearby = new Set();
+
+  function loadMedia(el) {
+    if (!el.src && el.dataset.src) {
+      if (el.parentElement === currentTile) el.fetchPriority = 'high';
+      el.src = el.dataset.src;
+    }
+    if (el.tagName === 'VIDEO' && el.paused) {
+      const p = el.play();
+      if (p) p.catch(() => { /* autoplay bloqueado: se queda en el primer frame */ });
+    }
+  }
+
+  function loadNearby() {
+    nearby.forEach(loadMedia);
+  }
+
+  const mediaObserver = new IntersectionObserver((entries) => {
+    for (const { target: el, isIntersecting } of entries) {
+      if (isIntersecting) {
+        nearby.add(el);
+        if (!isAnimating) loadMedia(el);
+      } else {
+        nearby.delete(el);
+        if (el.tagName === 'VIDEO' && !el.paused) el.pause();
+      }
+    }
+  }, { root: gallery, rootMargin: '0px 50%' });
 
   // ── Navigation ─────────────────────────────────────────
 
@@ -87,6 +144,13 @@
     if (!allTiles.length) return;
     const ci = findClosestIdx();
     if (!isAnimating) targetIdx = ci;
+
+    if (currentTile !== allTiles[ci]) {
+      if (currentTile) currentTile.classList.remove('is-current');
+      currentTile = allTiles[ci];
+      currentTile.classList.add('is-current');
+    }
+
     const idx = allTiles[ci].getAttribute('data-idx') ?? '';
     if (!userInput) currentNumberEl.textContent = idx;
     clearTimeout(hashUpdateTimer);
@@ -120,26 +184,27 @@
     if (targetIdx < 0) targetIdx = findClosestIdx();
     targetIdx = Math.max(0, Math.min(allTiles.length - 1, targetIdx + direction));
     centerTile(allTiles[targetIdx]);
-    for (let off = -2; off <= 2; off++) {
-      const pi = targetIdx + off;
-      if (pi >= 0 && pi < allTiles.length) {
-        const img = allTiles[pi].querySelector('img[loading="lazy"]');
-        if (img) img.loading = 'eager';
-      }
-    }
   }
 
   // ── Shuffle animation ──────────────────────────────────
 
   function stopShuffle() {
-    if (shuffleAnim) { clearTimeout(shuffleAnim); cancelAnimationFrame(shuffleAnim); }
-    shuffleAnim = null;
+    if (shuffleTimer) { clearTimeout(shuffleTimer); shuffleTimer = null; }
+    if (shuffleRaf) { cancelAnimationFrame(shuffleRaf); shuffleRaf = null; }
     currentNumberEl.classList.remove('error');
   }
 
   function shuffleThenGo(finalIdx) {
     const maxIdx = allTiles.length - 1;
     if (finalIdx == null) finalIdx = Math.floor(Math.random() * allTiles.length);
+
+    // El parpadeo del número es justo lo que molesta con reduced-motion.
+    if (reduceMotion.matches) {
+      currentNumberEl.textContent = finalIdx;
+      goToIndex(String(finalIdx));
+      return;
+    }
+
     const totalMs = 1200;
     const startTime = performance.now();
     currentNumberEl.classList.add('error');
@@ -149,39 +214,44 @@
       if (elapsed < totalMs) {
         const speed = 30 + 120 * (elapsed / totalMs);
         currentNumberEl.textContent = Math.floor(Math.random() * (maxIdx + 1));
-        shuffleAnim = setTimeout(() => {
-          shuffleAnim = requestAnimationFrame(tick);
+        shuffleTimer = setTimeout(() => {
+          shuffleRaf = requestAnimationFrame(tick);
         }, speed);
       } else {
         currentNumberEl.classList.remove('error');
         currentNumberEl.textContent = finalIdx;
-        shuffleAnim = null;
+        shuffleRaf = null;
         goToIndex(String(finalIdx));
       }
     }
-    shuffleAnim = requestAnimationFrame(tick);
+    shuffleRaf = requestAnimationFrame(tick);
   }
 
   // ── Input handling ─────────────────────────────────────
 
+  function commitInput() {
+    clearTimeout(inputTimer);
+    const val = userInput;
+    userInput = '';
+    if (!val) return;
+    const isNumeric = /^\d+$/.test(val);
+    if (isNumeric && document.querySelector(`.tile[data-idx="${val}"]`)) {
+      goToIndex(val);
+    } else if (!isNumeric && window.Gallery.textToNumber) {
+      const idx = window.Gallery.textToNumber(val, allTiles.length);
+      shuffleThenGo(idx);
+    } else {
+      shuffleThenGo();
+    }
+  }
+
   function handleInput(ch) {
     stopShuffle();
+    hideHint();
     userInput += ch;
     currentNumberEl.textContent = userInput;
     clearTimeout(inputTimer);
-    inputTimer = setTimeout(() => {
-      const val = userInput;
-      userInput = '';
-      const isNumeric = /^\d+$/.test(val);
-      if (isNumeric && document.querySelector(`.tile[data-idx="${val}"]`)) {
-        goToIndex(val);
-      } else if (!isNumeric && window.Gallery.textToNumber) {
-        const idx = window.Gallery.textToNumber(val, allTiles.length);
-        shuffleThenGo(idx);
-      } else {
-        shuffleThenGo();
-      }
-    }, 1500);
+    inputTimer = setTimeout(commitInput, 1500);
   }
 
   function cancelInput() {
@@ -191,11 +261,31 @@
     updateCurrent();
   }
 
+  // ── Hint ───────────────────────────────────────────────
+
+  let hintTimer = null;
+
+  function showHint() {
+    if (!hintEl) return;
+    hintEl.classList.add('show');
+    hintTimer = setTimeout(hideHint, 6000);
+  }
+
+  function hideHint() {
+    if (!hintEl) return;
+    clearTimeout(hintTimer);
+    hintEl.classList.remove('show');
+  }
+
   // ── Init ───────────────────────────────────────────────
 
   async function init() {
+    const loader = document.getElementById('loader');
     try {
-      const res = await fetch('img/manifest.json', { cache: 'no-cache' });
+      // El ?v= no es decorativo: _headers marca /img/* como immutable durante
+      // un año y no se puede excluir el manifest por patrón. Ver _headers.
+      const res = await fetch(`img/manifest.json?v=${Date.now()}`, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const manifest = await res.json();
       addScrollMargin();
       for (const item of manifest.items) {
@@ -206,22 +296,25 @@
           targetIdx = allTiles.indexOf(tile);
           centerTile(tile);
         });
+        let media;
         if (item.type === 'video') {
-          const v = document.createElement('video');
-          v.src = `img/${item.file}`;
-          v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
-          tile.appendChild(v);
+          media = document.createElement('video');
+          media.preload = 'none';
+          media.autoplay = true; media.loop = true; media.muted = true; media.playsInline = true;
+          media.setAttribute('aria-label', `Vídeo de perfil nº ${item.i}`);
         } else {
-          const img = new Image();
-          img.src = `img/${item.file}`;
-          img.loading = 'lazy';
-          tile.appendChild(img);
+          media = document.createElement('img');
+          media.decoding = 'async';
+          media.alt = `Foto de perfil nº ${item.i}`;
         }
+        media.dataset.src = `img/${item.file}`;   // src real al acercarse (ver mediaObserver)
+        tile.appendChild(media);
         gallery.appendChild(tile);
       }
       allTiles = [...document.querySelectorAll('.tile')];
       addScrollMargin();
       requestAnimationFrame(() => {
+        updateMargins();
         requestAnimationFrame(() => {
           const hash = location.hash.slice(1);
           if (hash && document.querySelector(`.tile[data-idx="${hash}"]`)) {
@@ -229,12 +322,14 @@
           } else {
             jumpToLast();
           }
+          // Se observa ya colocados: antes, las primeras fotos contarían como visibles.
+          allTiles.forEach(t => mediaObserver.observe(t.firstChild));
+          showHint();
         });
       });
       gallery.addEventListener('scroll', updateCurrent);
       window.addEventListener('resize', () => {
-        document.querySelectorAll('.galleryMargin')
-          .forEach(m => m.style.width = `${marginPx()}px`);
+        updateMargins();
         updateCurrent();
       });
       window.addEventListener('hashchange', () => {
@@ -244,7 +339,13 @@
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Dead') return;
         if (e.key === 'Escape') { cancelInput(); return; }
-        if (e.key === 'Backspace' && userInput) { userInput = userInput.slice(0, -1); currentNumberEl.textContent = userInput || ''; return; }
+        if (e.key === 'Enter') { if (userInput) commitInput(); return; }
+        if (e.key === 'Backspace' && userInput) {
+          userInput = userInput.slice(0, -1);
+          if (userInput) currentNumberEl.textContent = userInput;
+          else cancelInput();
+          return;
+        }
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
           if (e.key === ' ' && userInput) { e.preventDefault(); handleInput(' '); return; }
           if (e.key !== ' ') { handleInput(e.key); return; }
@@ -254,13 +355,19 @@
         else if (e.key === 'Home') { e.preventDefault(); targetIdx = 0; centerTile(allTiles[0]); }
         else if (e.key === 'End') { e.preventDefault(); targetIdx = allTiles.length - 1; centerTile(allTiles[targetIdx]); }
       });
-    } catch (e) {
-      document.getElementById('loader').textContent = 'No se encontró img/manifest.json. Ejecuta el script primero.';
-      return;
-    } finally {
-      document.getElementById('loader').style.display = 'none';
+
+      loader.style.display = 'none';
       document.querySelectorAll('.gallery, #current-number, #arrow, #progress')
         .forEach(el => el.style.visibility = 'visible');
+    } catch (e) {
+      // Ojo: esto tiene que quedar visible. Antes se ocultaba el loader en un
+      // finally y el error no se veía nunca.
+      loader.textContent = 'No se pudo cargar img/manifest.json. Ejecuta el script primero.';
+      loader.style.color = '#ff3333';
+      loader.style.fontSize = '1.1rem';
+      loader.style.padding = '0 2rem';
+      loader.style.textAlign = 'center';
+      console.error('[gallery]', e);
     }
   }
 
@@ -273,5 +380,5 @@
     get tileCount() { return allTiles.length; },
   });
 
-  window.addEventListener('load', init);
+  init();   // el <script> va al final del body: el DOM ya está
 })();

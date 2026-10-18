@@ -1,18 +1,40 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 
 <head>
   <meta charset="UTF-8" />
   <title>pfp's</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Archivo completo de mis fotos de perfil de Telegram, de la más antigua a la más reciente." />
+  <link rel="canonical" href="https://profile.meowrhino.studio/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="pfp's" />
+  <meta property="og:description" content="Archivo completo de mis fotos de perfil de Telegram, de la más antigua a la más reciente." />
+  <meta property="og:url" content="https://profile.meowrhino.studio/" />
+  <meta property="og:image" content="https://profile.meowrhino.studio/favicon/android-chrome-512x512.png" />
+  <meta name="twitter:card" content="summary" />
   <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="favicon/favicon-16x16.png">
   <link rel="icon" href="favicon/favicon.ico">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Agdasima:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="preload" href="fonts/agdasima-700.woff2" as="font" type="font/woff2" crossorigin>
   <style>
+    /* Agdasima (OFL), solo latin, servida desde aquí: Google Fonts bloqueaba
+       la página entera con poca red. */
+    @font-face {
+      font-family: "Agdasima";
+      font-weight: 400;
+      font-display: swap;
+      src: url("fonts/agdasima-400.woff2") format("woff2");
+    }
+
+    @font-face {
+      font-family: "Agdasima";
+      font-weight: 700;
+      font-display: swap;
+      src: url("fonts/agdasima-700.woff2") format("woff2");
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
@@ -99,19 +121,36 @@
       display: none;
     }
 
+    /* Cuadrado a propósito: el border-radius:50% del hover sólo da un círculo
+       si el tile es cuadrado. Si cambias estas medidas, mantenlas iguales. */
     .tile {
       flex: 0 0 auto;
       width: 40vh;
       height: 40vh;
       overflow: hidden;
       background: #2a2a2a;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      border-radius: 0;
+      transition: border-radius 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+                  box-shadow 0.4s ease;
       cursor: pointer;
     }
 
-    .tile:hover {
-      transform: scale(1.04);
-      box-shadow: 0 0 28px rgba(255, 230, 0, 0.15);
+    /* El círculo solo donde hay puntero real: en táctil el :hover se queda
+       pegado tras tocar y dejaría un tile redondo para siempre. */
+    @media (hover: hover) {
+      .tile:hover {
+        border-radius: 50%;
+        box-shadow: 0 0 34px rgba(255, 230, 0, 0.18);
+      }
+    }
+
+    /* Sin hover (móvil/tablet) el efecto no existiría, así que lo lleva
+       el tile centrado. */
+    @media (hover: none) {
+      .tile.is-current {
+        border-radius: 50%;
+        box-shadow: 0 0 34px rgba(255, 230, 0, 0.18);
+      }
     }
 
     .tile img,
@@ -120,6 +159,19 @@
       height: 100%;
       object-fit: cover;
       display: block;
+      border-radius: inherit;   /* Safari dentaría el borde sin esto */
+    }
+
+    /* Aún sin cargar (gallery.js pone el src al acercarse): sin icono roto. */
+    .tile img:not([src]) {
+      visibility: hidden;
+    }
+
+    /* Chrome pinta un overlay de play/mute sobre vídeos pausados. */
+    .tile video::-webkit-media-controls,
+    .tile video::-webkit-media-controls-start-playback-button {
+      display: none !important;
+      -webkit-appearance: none;
     }
 
     .galleryMargin {
@@ -138,6 +190,38 @@
       z-index: 5;
     }
 
+    #hint {
+      position: fixed;
+      bottom: 3vh;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      font-size: 0.95rem;
+      letter-spacing: 0.06em;
+      color: #6a6a6a;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+
+    #hint.show {
+      opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      .tile,
+      #progress,
+      #hint,
+      #current-number {
+        transition: none;
+      }
+
+      #loader span {
+        animation: none;
+        opacity: 1;
+      }
+    }
   </style>
 </head>
 
@@ -146,6 +230,7 @@
   <div id="arrow">⬇</div>
   <div id="current-number">0</div>
   <div class="gallery"></div>
+  <div id="hint">escribe un número o una palabra · ← → para navegar</div>
   <div id="progress"></div>
 
   <script src="js/text2num.js"></script><!-- optional: remove to disable text input -->

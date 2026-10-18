@@ -1,0 +1,23 @@
+# Cabeceras para Cloudflare Workers (static assets).
+# Por defecto sirve todo con "max-age=0, must-revalidate", así que cada visita
+# revalida los ~100 MB de img/. Las fotos son inmutables: 0.jpg siempre es la
+# misma foto, los índices sólo crecen por el final.
+#
+# OJO: las reglas que casan con una misma URL se COMBINAN (los valores se unen
+# con coma), no se sobrescriben. Y sólo se admite un splat, sin sufijo: no
+# existe "/img/*.jpg". Por eso no se puede excluir aquí img/manifest.json —
+# que sí cambia cada semana — y gallery.js lo pide con ?v=<timestamp>, que
+# nunca casa con la copia cacheada. Si quitas el cache-buster de gallery.js,
+# quita también esta regla o el manifest se congela un año.
+
+/img/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/favicon/*
+  Cache-Control: public, max-age=604800
+
+/js/*
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
